@@ -1,9 +1,10 @@
+import os
 import asyncio
+from flask import Flask, request
 from telegram import Update
-from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
+from telegram.ext import Application, CommandHandler, ContextTypes
 from telegram.error import RetryAfter, TimedOut, NetworkError
 
-# 1. ضع التوكن الخاص ببوتك هنا
 BOT_TOKEN = "8956367665:AAG21WFhOOakESWHrPQhiZtkrIZuzySHXyQ"
 
 TOPICS_LIST = [
@@ -97,8 +98,32 @@ async def setup_group(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception:
         pass
 
-if __name__ == "__main__":
-    app = ApplicationBuilder().token(BOT_TOKEN).build()
-    app.add_handler(CommandHandler("setup", setup_group))
-    print("البوت يعمل الآن...")
-    app.run_polling(drop_pending_updates=True)
+telegram_app = Application.builder().token(BOT_TOKEN).build()
+telegram_app.add_handler(CommandHandler("setup", setup_group))
+
+loop = asyncio.new_event_loop()
+asyncio.set_event_loop(loop)
+loop.run_until_complete(telegram_app.initialize())
+
+app = Flask(__name__)
+
+@app.route('/')
+def index():
+    return "Bot is running on Render Web Service!"
+
+@app.route(f'/{BOT_TOKEN}', methods=['POST'])
+def webhook():
+    try:
+        json_data = request.get_json(force=True)
+        update = Update.de_json(json_data, telegram_app.bot)
+
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        loop.run_until_complete(telegram_app.process_update(update))
+    except Exception as e:
+        print(f"Webhook Error: {e}")
+    return 'OK', 200
+
+if __name__ == '__main__':
+    port = int(os.environ.get('PORT', 10000))
+    app.run(host='0.0.0.0', port=port)
